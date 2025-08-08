@@ -3,17 +3,15 @@
 
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-typedef enum {
+enum season_type {
     SEASON_STRING,
     SEASON_NULL,
     SEASON_NUMBER,
     SEASON_BOOLEAN,
     SEASON_OBJECT,
     SEASON_ARRAY,
-} season_type;
+};
 
 struct season_string {
     size_t len;
@@ -34,19 +32,19 @@ struct season_array {
 };
 
 struct season {
-    season_type type;
+    enum season_type type;
     union {
         struct season_string string;
         double number;
         int boolean;
         struct season_object object;
         struct season_array array;
-        int _null;
     };
 };
 
 void season_array_add(struct season *array, struct season item);
 void season_object_add(struct season *object, char *key, struct season *item);
+void season_load(struct season *season, char *json_string);
 void season_render(struct season *season, FILE *stream);
 void season_free(struct season *season);
 
