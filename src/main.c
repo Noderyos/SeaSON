@@ -31,6 +31,30 @@
         } while (0)
 
 int main() {
+    char *json = "[\"Hello, World!\", 3.141592, {\"name\": \"Noderyos\", \"age\": 18.500000}, null, true]";
+    Lexer l = lexer_init(json, strlen(json));
+
+    Token t = lexer_next(&l);
+    while (t.type != TOKEN_END) {
+        switch (t.type) {
+            case TOKEN_END: printf("end\n");break;
+            case TOKEN_OPEN_CURLY: printf("{\n");break;
+            case TOKEN_CLOSE_CURLY: printf("}\n");break;
+            case TOKEN_INVALID: printf("invalid\n");break;
+            case TOKEN_OPEN_BRACKET: printf("[\n");break;
+            case TOKEN_CLOSE_BRACKET: printf("]\n");break;
+            case TOKEN_COMMA: printf(",\n");break;
+            case TOKEN_COLON: printf(":\n");break;
+            case TOKEN_STRING: printf("'%.*s'\n", (int)t.text_len, t.text);break;
+            case TOKEN_NUMBER: printf("%lf\n", strtod(t.text, NULL));break;
+            case TOKEN_NULL: printf("null\n");break;
+            case TOKEN_TRUE: printf("true\n");break;
+            case TOKEN_FALSE: printf("false\n");break;
+            default: UNREACHABLE("token_type_name");
+        }
+        t = lexer_next(&l);
+    }
+
     struct season array = {.type = SEASON_ARRAY};
 
     struct season item = {SEASON_STRING, .string.str = strdup("Hello, World!"), .string.len = strlen("Hello, World!")};
