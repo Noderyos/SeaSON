@@ -24,6 +24,13 @@ void season_array_add(struct season *array, struct season item) {
     array->array.items[array->array.count++] = item;
 }
 
+char *season_strdup(const char *s) { // C99 don't have strdup
+    size_t size = strlen(s) + 1;
+    char *str = malloc(size);
+    if (str) memcpy(str, s, size);
+    return str;
+}
+
 void season_object_add(struct season *object, char *key, struct season *item) {
     SEASON_ASSERT(object->type == SEASON_OBJECT, "Object must be an object");
     if (object->object.count >= object->object.capacity) {
@@ -31,7 +38,7 @@ void season_object_add(struct season *object, char *key, struct season *item) {
         object->object.items = realloc(object->object.items, object->object.capacity*sizeof(*object->object.items));
         SEASON_ASSERT(object->object.items != NULL, "Buy more RAM lol");
     }
-    object->object.items[object->object.count].key = strdup(key);
+    object->object.items[object->object.count].key = season_strdup(key);
     object->object.items[object->object.count].value = malloc(sizeof(*item));
     memcpy(object->object.items[object->object.count].value, item, sizeof(*item));
     object->object.count++;
@@ -172,6 +179,8 @@ char *season_unescape(const char *str, size_t len) {
                 case 'r':*p++ = 13;break;
                 case 'u':
                     SEASON_LEX_UNREACH("Unicode is not yet supported");
+                default:
+                    SEASON_LEX_UNREACH("Invalid escape code");;
             }
             str++;
         } else {

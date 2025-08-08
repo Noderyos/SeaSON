@@ -3,7 +3,6 @@
 #include <sys/time.h>
 
 #include "season.h"
-#include "lexer.h"
 
 int main(int argc, char *argv[]) {
     (void) argc;

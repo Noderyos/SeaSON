@@ -8,7 +8,7 @@
 
 #define SEASON_UNUSED(x) (void)(x)
 
-struct {
+const struct {
     char c;
     enum season_token_type type;
 } season_literals[] = {
