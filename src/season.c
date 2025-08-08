@@ -1,5 +1,6 @@
 #include "season.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -45,6 +46,33 @@ int season_is_int(double x) {
     return diff < eps;
 }
 
+char *season_escape(const char *str, size_t len) {
+    char *out = malloc(len * 2 + 1);
+    if (!out) return NULL;
+
+    char *p = out;
+
+    while (len--) {
+        char c = *str++;
+        switch (c) {
+            case '"':  *p++ = '\\'; *p++ = '"';  break;
+            case '\\': *p++ = '\\'; *p++ = '\\'; break;
+            case '/':  *p++ = '\\'; *p++ = '/';  break;
+            case '\b': *p++ = '\\'; *p++ = 'b';  break;
+            case '\t': *p++ = '\\'; *p++ = 't';  break;
+            case '\n': *p++ = '\\'; *p++ = 'n';  break;
+            case '\v': *p++ = '\\'; *p++ = 'v';  break;
+            case '\f': *p++ = '\\'; *p++ = 'f';  break;
+            case '\r': *p++ = '\\'; *p++ = 'r';  break;
+            default:
+                *p++ = c;
+                break;
+        }
+    }
+    *p = '\0';
+    return out;
+}
+
 void season_render(struct season *season, FILE *stream) {
     switch (season->type) {
         case SEASON_NULL:
@@ -54,7 +82,9 @@ void season_render(struct season *season, FILE *stream) {
             fprintf(stream, "%s", season->boolean ? "true" : "false");
             break;
         case SEASON_STRING:
-            fprintf(stream, "\"%.*s\"", (int)season->string.len, season->string.str);
+            char *escaped = season_escape(season->string.str, season->string.len);
+            fprintf(stream, "\"%s\"", escaped);
+            free(escaped);
             break;
         case SEASON_NUMBER:
             if (season_is_int(season->number))
@@ -120,12 +150,45 @@ void season_free(struct season *season) {
     }
 }
 
+char *season_unescape(const char *str, size_t len) {
+    char *out = malloc(len + 1);
+    char *p = out;
+
+    while(len--) {
+        if (*str == '\\') {
+            str++;
+            char next = *str;
+            switch(next) {
+                case '"':
+                case '\\':
+                case '/':
+                    *p++ = next;
+                    break;
+                case 'b':*p++ = 8;break;
+                case 't':*p++ = 9;break;
+                case 'n':*p++ = 10;break;
+                case 'v':*p++ = 11;break;
+                case 'f':*p++ = 12;break;
+                case 'r':*p++ = 13;break;
+                case 'u':
+                    SEASON_LEX_UNREACH("Unicode is not yet supported");
+            }
+            str++;
+        } else {
+            *p++ = *str++;
+        }
+    }
+    return out;
+}
+
+
+
 struct season season_parse_symbol(struct season_token t) {
     struct season value;
     switch (t.type) {
         case SEASON_TOK_STRING:
             value.type = SEASON_STRING;
-            value.string.str = strndup(t.text, t.text_len);
+            value.string.str = season_unescape(t.text, t.text_len);
             value.string.len = t.text_len;
             break;
         case SEASON_TOK_NUMBER:
@@ -155,7 +218,7 @@ struct season season_parse_object(struct season_lexer *l) {
     struct season_token t = season_lex_next(l);
     while (t.type != SEASON_TOK_CLOSE_CURLY) {
         if (t.type != SEASON_TOK_STRING) SEASON_LEX_UNREACH("Expecting key");
-        char *key = strndup(t.text, t.text_len);
+        char *key = season_unescape(t.text, t.text_len);
         if (season_lex_next(l).type != SEASON_TOK_COLON) SEASON_LEX_UNREACH("Expecting colon");
         t = season_lex_next(l);
 
