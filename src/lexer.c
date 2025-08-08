@@ -1,10 +1,10 @@
 #include "lexer.h"
 
+#include <assert.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
-#include <ctype.h>
 
 #define SEASON_UNUSED(x) (void)(x)
 

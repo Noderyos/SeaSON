@@ -1,10 +1,8 @@
 #include "season.h"
-
-#include <ctype.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include "lexer.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define SEASON_ASSERT(x, msg) \
         do { \
@@ -54,7 +52,7 @@ int season_is_int(double x) {
 }
 
 char *season_escape(const char *str, size_t len) {
-    char *out = malloc(len * 2 + 1);
+    char *out = malloc(len*2 + 1);
     if (!out) return NULL;
 
     char *p = out;
@@ -258,7 +256,11 @@ struct season season_parse_object(struct season_lexer *l) {
         free(key);
         t = season_lex_next(l);
         if (t.type != SEASON_TOK_CLOSE_CURLY && t.type != SEASON_TOK_COMMA) SEASON_LEX_UNREACH("Expecting comma");
-        if (t.type == SEASON_TOK_COMMA && (t=season_lex_next(l)).type == SEASON_TOK_CLOSE_CURLY) SEASON_LEX_UNREACH("Expecting value");
+        if (t.type == SEASON_TOK_COMMA) {
+            t = season_lex_next(l);
+            if (t.type == SEASON_TOK_CLOSE_CURLY)
+                SEASON_LEX_UNREACH("Expecting value");
+        }
     }
     return object;
 }
@@ -293,7 +295,11 @@ struct season season_parse_array(struct season_lexer *l) {
         season_array_add(&array, value);
         t = season_lex_next(l);
         if (t.type != SEASON_TOK_CLOSE_BRACKET && t.type != SEASON_TOK_COMMA) SEASON_LEX_UNREACH("Expecting comma");
-        if (t.type == SEASON_TOK_COMMA && (t=season_lex_next(l)).type == SEASON_TOK_CLOSE_BRACKET) SEASON_LEX_UNREACH("Expecting value");
+        if (t.type == SEASON_TOK_COMMA) {
+            t = season_lex_next(l);
+            if (t.type == SEASON_TOK_CLOSE_BRACKET)
+                SEASON_LEX_UNREACH("Expecting value");
+        }
     }
     return array;
 }
