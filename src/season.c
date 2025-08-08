@@ -185,6 +185,7 @@ char *season_unescape(const char *str, size_t len) {
             *p++ = *str++;
         }
     }
+    *p = '\0';
     return out;
 }
 
