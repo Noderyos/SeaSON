@@ -5,8 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SEASON_UNUSED(x) (void)(x)
-
 static const enum season_token_type SEASON_LITERAL_MAP[256] = {
     ['{'] = SEASON_TOK_OPEN_CURLY,
     ['}'] = SEASON_TOK_CLOSE_CURLY,
@@ -21,20 +19,18 @@ struct season_lexer season_lex_init(char *content, size_t content_len){
     return l;
 }
 
-#define season_lex_chop_char(l) ((l)->content[(l)->cursor++])
-#define season_is_num_start(c) (strchr("0123456789-", c) != NULL)
-#define season_is_num(c) (strchr("0123456789-.eE", c) != NULL)
+#define _season_lex_chop_char(l) ((l)->content[(l)->cursor++])
+#define _season_is_num_start(c) (strchr("0123456789-", c) != NULL)
+#define _season_is_num(c) (strchr("0123456789-.eE", c) != NULL)
 
-void season_lex_trim_left(struct season_lexer *l){
-    while (l->cursor < l->content_len && isspace(l->content[l->cursor])){
-        SEASON_UNUSED(season_lex_chop_char(l));
-    }
-}
 
 struct season_token season_lex_next(struct season_lexer *l){
-    season_lex_trim_left(l);
+    while (l->cursor < l->content_len && isspace(l->content[l->cursor])){
+        (void)_season_lex_chop_char(l);
+    }
+
     struct season_token token = {
-            .text = &l->content[l->cursor]
+        .text = &l->content[l->cursor]
     };
 
     if (l->cursor >= l->content_len) return token;
@@ -49,9 +45,9 @@ struct season_token season_lex_next(struct season_lexer *l){
         return token;
     }
 
-    if (season_is_num_start(l->content[l->cursor])) {
+    if (_season_is_num_start(l->content[l->cursor])) {
         token.type = SEASON_TOK_NUMBER;
-        while (l->cursor < l->content_len && season_is_num(l->content[l->cursor])) {
+        while (l->cursor < l->content_len && _season_is_num(l->content[l->cursor])) {
             token.text_len++;
             l->cursor++;
         }
@@ -84,7 +80,7 @@ struct season_token season_lex_next(struct season_lexer *l){
         return token;
     }
 
-    SEASON_UNUSED(season_lex_chop_char(l));
+    (void)_season_lex_chop_char(l);
     token.type = SEASON_TOK_INVALID;
     token.text_len = 1;
     return token;

@@ -1,7 +1,5 @@
 #include "season.h"
 
-#include <assert.h>
-
 #include "lexer.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +13,13 @@
                                 #x, ##__VA_ARGS__); \
                 exit(1); \
             } \
+        }while(0)
+
+#define ERROR(fmt, ...) \
+        do { \
+                fprintf(stderr, "error: %s:%d: %s: %s\n", \
+                        __FILE__, __LINE__, __FUNCTION__, fmt, ##__VA_ARGS__); \
+                exit(1); \
         }while(0)
 
 char *_season_strdup(const char *s) { // C99 don't have strdup
@@ -82,9 +87,9 @@ char *_season_unescape(const char *str, size_t len) {
                 case 'f':*p++ = 12;break;
                 case 'r':*p++ = 13;break;
                 case 'u':
-                    SEASON_LEX_UNREACH("Unicode is not yet supported");
+                    ERROR("Unicode is not yet supported");
                 default:
-                    SEASON_LEX_UNREACH("Invalid escape code");;
+                    ERROR("Invalid escape code");;
             }
             str++;
         } else {
@@ -119,7 +124,7 @@ struct season _season_parse_symbol(struct season_token t) {
             value.boolean = 0;
             break;
         default:
-            SEASON_LEX_UNREACH("Not a symbol");
+            ERROR("Not a symbol");
     }
     return value;
 }
@@ -129,10 +134,10 @@ struct season _season_parse_object(struct season_lexer *l) {
     struct season object = {.type = SEASON_OBJECT};
     struct season_token t = season_lex_next(l);
     while (t.type != SEASON_TOK_CLOSE_CURLY) {
-        if (t.type != SEASON_TOK_STRING) SEASON_LEX_UNREACH("Expecting key");
+        if (t.type != SEASON_TOK_STRING) ERROR("Expecting key");
         char *key = _season_unescape(t.text, t.text_len);
         if (season_lex_next(l).type != SEASON_TOK_COLON)
-            SEASON_LEX_UNREACH("Expecting colon");
+            ERROR("Expecting colon");
         t = season_lex_next(l);
 
         struct season value;
@@ -153,20 +158,20 @@ struct season _season_parse_object(struct season_lexer *l) {
                 break;
 
             case SEASON_TOK_CLOSE_CURLY:
-                SEASON_LEX_UNREACH("Should not fall here");
+                ERROR("Should not fall here");
 
             default:
-                SEASON_LEX_UNREACH("Invalid token");
+                ERROR("Invalid token");
         }
         season_object_add(&object, key, &value);
         free(key);
         t = season_lex_next(l);
         if (t.type != SEASON_TOK_CLOSE_CURLY && t.type != SEASON_TOK_COMMA)
-            SEASON_LEX_UNREACH("Expecting comma");
+            ERROR("Expecting comma");
         if (t.type == SEASON_TOK_COMMA) {
             t = season_lex_next(l);
             if (t.type == SEASON_TOK_CLOSE_CURLY)
-                SEASON_LEX_UNREACH("Expecting value");
+                ERROR("Expecting value");
         }
     }
     return object;
@@ -194,19 +199,19 @@ struct season _season_parse_array(struct season_lexer *l) {
                 break;
 
             case SEASON_TOK_CLOSE_BRACKET:
-                SEASON_LEX_UNREACH("Should not fall here");
+                ERROR("Should not fall here");
 
             default:
-                SEASON_LEX_UNREACH("Invalid token");
+                ERROR("Invalid token");
         }
         season_array_add(&array, value);
         t = season_lex_next(l);
         if (t.type != SEASON_TOK_CLOSE_BRACKET && t.type != SEASON_TOK_COMMA)
-            SEASON_LEX_UNREACH("Expecting comma");
+            ERROR("Expecting comma");
         if (t.type == SEASON_TOK_COMMA) {
             t = season_lex_next(l);
             if (t.type == SEASON_TOK_CLOSE_BRACKET)
-                SEASON_LEX_UNREACH("Expecting value");
+                ERROR("Expecting value");
         }
     }
     return array;
@@ -296,7 +301,7 @@ void season_load(struct season *season, char *json_string) {
             *season = _season_parse_symbol(t);
             break;
         default:
-            SEASON_LEX_UNREACH("Invalid token");
+            ERROR("Invalid token");
     }
 }
 
