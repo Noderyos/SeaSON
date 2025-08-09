@@ -28,6 +28,8 @@ enum season_token_type {
 
 struct season_token {
     enum season_token_type type;
+    size_t line;
+    size_t column;
     const char *text;
     size_t text_len;
 };

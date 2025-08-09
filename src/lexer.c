@@ -19,10 +19,18 @@ struct season_lexer season_lex_init(char *content, size_t content_len){
     return l;
 }
 
-#define _season_lex_chop_char(l) ((l)->content[(l)->cursor++])
 #define _season_is_num_start(c) (strchr("0123456789-", c) != NULL)
 #define _season_is_num(c) (strchr("0123456789-.eE", c) != NULL)
 
+char _season_lex_chop_char(struct season_lexer *l){
+    char x = l->content[l->cursor];
+    l->cursor++;
+    if(x == '\n'){
+        l->line++;
+        l->bol = l->cursor;
+    }
+    return x;
+}
 
 struct season_token season_lex_next(struct season_lexer *l){
     while (l->cursor < l->content_len && isspace(l->content[l->cursor])){
@@ -30,6 +38,9 @@ struct season_token season_lex_next(struct season_lexer *l){
     }
 
     struct season_token token = {
+        .type = SEASON_TOK_END,
+        .line = l->line+1,
+        .column = l->cursor-l->bol+1,
         .text = &l->content[l->cursor]
     };
 
@@ -39,9 +50,11 @@ struct season_token season_lex_next(struct season_lexer *l){
         token.type = SEASON_TOK_STRING;
         l->cursor++;
         token.text++;
-        while (l->cursor < l->content_len && l->content[l->cursor++] != '"') {
+        while (l->cursor < l->content_len && l->content[l->cursor] != '"') {
             token.text_len++;
+            l->cursor++;
         }
+        l->cursor++;
         return token;
     }
 
