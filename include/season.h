@@ -1,3 +1,87 @@
+/* season.h
+ * v1.0
+ * public domain json reader/writer
+ * https://github.com/Noderyos/SeaSON
+ * no warranty implied; use at your own risk
+
+USAGE
+
+    Do this:
+        #define SEASON_IMPLEMENTATION
+    before you include this file in *one* C or C++ file to create the implementation.
+
+    // i.e. it should look like this:
+    #include ...
+    #include ...
+    #include ...
+    #define SEASON_IMPLEMENTATION
+    #include "season.h"
+
+DOCUMENTATION
+
+    You shall not use any symbols prefixed with ‘_’,
+    unless you know exactly what you're doing.
+
+    List of supplied symbols
+        * enum season_type
+            - JSON element type, used for element creation
+            - YOU NEED TO SET IT YOURSELF IF YOU CREATE A SEASON ELEMENT AT HAND
+
+        * struct season
+            - JSON element, includes all types using union,
+                .type field indicates which element below is used
+                    SEASON_NUMBER  > .number  - double
+                    SEASON_BOOLEAN > .boolean - int, false if 0, true otherwise
+                    SEASON_NULL    > [empty]  - is implied
+                    SEASON_STRING  > ._string - shall not access it directly, hence the _
+                    SEASON_OBJECT  > ._object - shall not access it directly, hence the _
+                    SEASON_ARRAY   > ._array  - shall not access it directly, hence the _
+
+        * struct season season_string(const char *s);
+            - Create season from char*
+
+        * struct season *season_object_get(struct season *object, const char *key);
+            - Retrieve value from object by key.
+            - Returns NULL if key is not found.
+
+        * void season_object_add(struct season *object, char *key, struct season *item);
+            - Add key-value pair to object.
+            - Overwrites key if already present.
+
+        * void season_object_remove(struct season *object, char *key);
+            - Remove key-value pair from object by key.
+            - Does nothing if key not found.
+
+        * struct season *season_array_get(struct season *array, size_t idx);
+            - Retrieve item from array at idx.
+            - Returns NULL if out of range.
+
+        * void season_array_add(struct season *array, struct season item);
+            - Append item to array.
+
+        * void season_array_remove(struct season *array, size_t idx);
+            - Remove item from array at idx.
+            - Does nothing if idx is out-of-range.
+
+        * void season_array_insert(struct season *array, struct season item, size_t idx);
+            - Insert item into array at idx.
+            - Shifts items right. (just to clarify)
+            - Appends if idx is out-of-range.
+
+        * void season_load(struct season *season, char *json_string);
+            - Parse json_string into season.
+
+        * void season_render(struct season *season, FILE *stream);
+            - Write JSON representation of season to stream.
+
+        * void season_free(struct season *season);
+            - Recursively free all memory associated with season structure.
+
+LICENSE
+
+    See end of file for license information.
+*/
+
 #ifndef SEASON_H
 #define SEASON_H
 
@@ -35,14 +119,15 @@ struct _season_array {
 struct season {
     enum season_type type;
     union {
-        struct _season_string string;
         double number;
         int boolean;
-        struct _season_object object;
-        struct _season_array array;
+        struct _season_string _string;
+        struct _season_object _object;
+        struct _season_array _array;
     };
 };
 
+struct season season_string(const char *s);
 
 struct season *season_object_get(struct season *object, const char *key);
 void season_object_add(struct season *object, char *key, struct season *item);
@@ -302,8 +387,8 @@ struct season _season_parse_symbol(struct _season_token t) {
     switch (t.type) {
         case _SEASON_TOK_STRING:
             value.type = SEASON_STRING;
-            value.string.str = _season_unescape(t.text, t.text_len);
-            value.string.len = t.text_len;
+            value._string.str = _season_unescape(t.text, t.text_len);
+            value._string.len = t.text_len;
             break;
         case _SEASON_TOK_NUMBER:
             value.type = SEASON_NUMBER;
@@ -414,19 +499,27 @@ int _season_object_idx(struct season *object, const char *key) {
     SEASON_ASSERT(object != NULL, "object must be non-null");
     SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
 
-    for (size_t i = 0; i < object->object.count; i++) {
-        if (strcmp(object->object.items[i].key, key) == 0) {
+    for (size_t i = 0; i < object->_object.count; i++) {
+        if (strcmp(object->_object.items[i].key, key) == 0) {
             return i;
         }
     }
     return -1;
 }
 
+struct season season_string(const char *s) {
+    struct season string = {
+        .type = SEASON_STRING,
+        ._string.str = _season_strdup(s),
+        ._string.len = strlen(s)
+    };
+    return string;
+}
 
 struct season *season_object_get(struct season *object, const char *key) {
     int idx = _season_object_idx(object, key);
     if (idx < 0) return NULL;
-    return object->object.items[idx].value;
+    return object->_object.items[idx].value;
 }
 
 void season_object_add(struct season *object, char *key, struct season *item) {
@@ -434,21 +527,21 @@ void season_object_add(struct season *object, char *key, struct season *item) {
     SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
     int key_idx = _season_object_idx(object, key);
     if (key_idx < 0) {
-        if (object->object.count >= object->object.capacity) {
-            object->object.capacity =
-                object->object.capacity == 0 ? 8 : object->object.capacity*2;
-            object->object.items = realloc(
-                object->object.items, object->object.capacity*sizeof(*object->object.items));
-            SEASON_ASSERT(object->object.items != NULL, "Buy more RAM lol");
+        if (object->_object.count >= object->_object.capacity) {
+            object->_object.capacity =
+                object->_object.capacity == 0 ? 8 : object->_object.capacity*2;
+            object->_object.items = realloc(
+                object->_object.items, object->_object.capacity*sizeof(*object->_object.items));
+            SEASON_ASSERT(object->_object.items != NULL, "Buy more RAM lol");
         }
-        struct _season_object_el *el = &object->object.items[object->object.count];
+        struct _season_object_el *el = &object->_object.items[object->_object.count];
         el->key = _season_strdup(key);
         el->value = malloc(sizeof(*item));
         memcpy(el->value, item, sizeof(*item));
-        object->object.count++;
+        object->_object.count++;
     } else {
-        season_free(object->object.items[key_idx].value);
-        memcpy(object->object.items[key_idx].value, item, sizeof(*item));
+        season_free(object->_object.items[key_idx].value);
+        memcpy(object->_object.items[key_idx].value, item, sizeof(*item));
     }
 }
 
@@ -458,12 +551,12 @@ void season_object_remove(struct season *object, char *key) {
 
     int idx = _season_object_idx(object, key);
     if (idx >= 0) {
-        free(object->object.items[idx].key);
-        season_free(object->object.items[idx].value);
-        free(object->object.items[idx].value);
-        memcpy(&object->object.items[idx], &object->object.items[idx+1],
-            (object->object.count-idx-1)*sizeof(*object->object.items));
-        object->object.count--;
+        free(object->_object.items[idx].key);
+        season_free(object->_object.items[idx].value);
+        free(object->_object.items[idx].value);
+        memcpy(&object->_object.items[idx], &object->_object.items[idx+1],
+            (object->_object.count-idx-1)*sizeof(*object->_object.items));
+        object->_object.count--;
     }
 }
 
@@ -471,46 +564,47 @@ struct season *season_array_get(struct season *array, size_t idx) {
     SEASON_ASSERT(array != NULL, "array must be non-null");
     SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
 
-    SEASON_ASSERT(idx < array->object.count, "invalid index");
-
-    return &array->array.items[idx];
+    if (idx < array->_object.count) {
+        return &array->_array.items[idx];
+    }
+    return NULL;
 }
 
 void season_array_add(struct season *array, struct season item) {
     SEASON_ASSERT(array != NULL, "array must be non-null");
     SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
-    season_array_insert(array, item, array->array.count);
+    season_array_insert(array, item, array->_array.count);
 }
 
 void season_array_remove(struct season *array, size_t idx) {
     SEASON_ASSERT(array != NULL, "array must be non-null");
     SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
 
-    SEASON_ASSERT(idx < array->object.count, "invalid index");
+    if (idx >= array->_object.count) return;
 
-    season_free(&array->array.items[idx]);
-    memcpy(&array->array.items[idx], &array->array.items[idx+1],
-        (array->array.count-idx-1)*sizeof(*array->array.items));
-    array->array.count--;
+    season_free(&array->_array.items[idx]);
+    memcpy(&array->_array.items[idx], &array->_array.items[idx+1],
+        (array->_array.count-idx-1)*sizeof(*array->_array.items));
+    array->_array.count--;
 }
 
 void season_array_insert(struct season *array, struct season item, size_t idx) {
     SEASON_ASSERT(array != NULL, "array must be non-null");
     SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
 
-    SEASON_ASSERT(idx <= array->object.count, "invalid index");
+    if (idx > array->_object.count) idx = array->_object.count;
 
-    if (array->array.count >= array->array.capacity) {
-        array->array.capacity =
-            array->array.capacity == 0 ? 8 : array->array.capacity*2;
-        array->array.items = realloc(
-            array->array.items, array->array.capacity*sizeof(*array->array.items));
-        SEASON_ASSERT(array->array.items != NULL, "Buy more RAM lol");
+    if (array->_array.count >= array->_array.capacity) {
+        array->_array.capacity =
+            array->_array.capacity == 0 ? 8 : array->_array.capacity*2;
+        array->_array.items = realloc(
+            array->_array.items, array->_array.capacity*sizeof(*array->_array.items));
+        SEASON_ASSERT(array->_array.items != NULL, "Buy more RAM lol");
     }
-    memcpy(&array->array.items[idx+1], &array->array.items[idx],
-        (array->array.count-idx)*sizeof(*array->array.items));
-    array->array.items[idx] = item;
-    array->array.count++;
+    memcpy(&array->_array.items[idx+1], &array->_array.items[idx],
+        (array->_array.count-idx)*sizeof(*array->_array.items));
+    array->_array.items[idx] = item;
+    array->_array.count++;
 }
 
 void season_load(struct season *season, char *json_string) {
@@ -545,7 +639,7 @@ void season_render(struct season *season, FILE *stream) {
             fprintf(stream, "%s", season->boolean ? "true" : "false");
             break;
         case SEASON_STRING:
-            char *escaped = _season_escape(season->string.str, season->string.len);
+            char *escaped = _season_escape(season->_string.str, season->_string.len);
             fprintf(stream, "\"%s\"", escaped);
             free(escaped);
             break;
@@ -557,9 +651,9 @@ void season_render(struct season *season, FILE *stream) {
             break;
         case SEASON_OBJECT:
             fprintf(stream, "{");
-            for (size_t i = 0; i < season->object.count; i++) {
+            for (size_t i = 0; i < season->_object.count; i++) {
                 if (i) fprintf(stream, ", ");
-                struct _season_object_el object = season->object.items[i];
+                struct _season_object_el object = season->_object.items[i];
                 fprintf(stream, "\"%s\": ", object.key);
                 season_render(object.value, stream);
             }
@@ -567,9 +661,9 @@ void season_render(struct season *season, FILE *stream) {
             break;
         case SEASON_ARRAY:
             fprintf(stream, "[");
-            for (size_t i = 0; i < season->array.count; i++) {
+            for (size_t i = 0; i < season->_array.count; i++) {
                 if (i) fprintf(stream, ", ");
-                season_render(&season->array.items[i], stream);
+                season_render(&season->_array.items[i], stream);
             }
             fprintf(stream, "]");
             break;
@@ -580,30 +674,30 @@ void season_free(struct season *season) {
     SEASON_ASSERT(season != NULL, "season must be non-null");
     switch (season->type) {
         case SEASON_STRING:
-            free(season->string.str);
-            season->string.str = NULL;
-            season->string.len = 0;
+            free(season->_string.str);
+            season->_string.str = NULL;
+            season->_string.len = 0;
             break;
         case SEASON_OBJECT:
-            for (size_t i = 0; i < season->object.count; i++) {
-                struct _season_object_el object = season->object.items[i];
+            for (size_t i = 0; i < season->_object.count; i++) {
+                struct _season_object_el object = season->_object.items[i];
                 free(object.key);
                 season_free(object.value);
                 free(object.value);
             }
-            free(season->object.items);
-            season->object.items = NULL;
-            season->object.count = 0;
-            season->object.capacity = 0;
+            free(season->_object.items);
+            season->_object.items = NULL;
+            season->_object.count = 0;
+            season->_object.capacity = 0;
             break;
         case SEASON_ARRAY:
-            for (size_t i = 0; i < season->array.count; i++) {
-                season_free(&season->array.items[i]);
+            for (size_t i = 0; i < season->_array.count; i++) {
+                season_free(&season->_array.items[i]);
             }
-            free(season->array.items);
-            season->array.items = NULL;
-            season->array.count = 0;
-            season->array.capacity = 0;
+            free(season->_array.items);
+            season->_array.items = NULL;
+            season->_array.count = 0;
+            season->_array.capacity = 0;
             break;
         case SEASON_NULL:
         case SEASON_BOOLEAN:
@@ -615,3 +709,24 @@ void season_free(struct season *season) {
 }
 
 #endif
+
+/*
+------------------------------------------------------------------------------
+This is free and unencumbered software released into the public domain.
+Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
+software, either in source code form or as a compiled binary, for any purpose,
+commercial or non-commercial, and by any means.
+In jurisdictions that recognize copyright laws, the author or authors of this
+software dedicate any and all copyright interest in the software to the public
+domain. We make this dedication for the benefit of the public at large and to
+the detriment of our heirs and successors. We intend this dedication to be an
+overt act of relinquishment in perpetuity of all present and future rights to
+this software under copyright law.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+------------------------------------------------------------------------------
+*/
