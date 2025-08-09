@@ -7,7 +7,7 @@
 int main(int argc, char *argv[]) {
     (void) argc;
     struct season season;
-    struct timeval a, b, c, d;
+    struct timeval start, end_parse, end_render, end_free;
 
     FILE *fp = fopen(argv[1], "r");
     if (fp == NULL) {
@@ -37,20 +37,24 @@ int main(int argc, char *argv[]) {
 
 
 
-    gettimeofday(&a, NULL);
+    gettimeofday(&start, NULL);
     season_load(&season, data);
-    gettimeofday(&b, NULL);
+    gettimeofday(&end_parse, NULL);
     season_render(&season, null);
-    gettimeofday(&c, NULL);
+    gettimeofday(&end_render, NULL);
     season_free(&season);
-    gettimeofday(&d, NULL);
+    gettimeofday(&end_free, NULL);
 
-    long load = (b.tv_sec - a.tv_sec)*1000000 + b.tv_usec - a.tv_usec;
-    long render = (c.tv_sec - b.tv_sec)*1000000 + c.tv_usec - b.tv_usec;
-    long free_time = (d.tv_sec - c.tv_sec)*1000000 + d.tv_usec - c.tv_usec;
-    printf("Loading speed: %lfo/s\n", size/(float)load*1000000);
-    printf("Rendering speed: %lfo/s\n", size/(float)render*1000000);
-    printf("Freeing speed: %lfo/s\n", size/(float)free_time*1000000);
+    long load = (end_parse.tv_sec - start.tv_sec)*1000000
+                    + end_parse.tv_usec - start.tv_usec;
+    long render = (end_render.tv_sec - end_parse.tv_sec)*1000000
+                    + end_render.tv_usec - end_parse.tv_usec;
+    long free_time = (end_free.tv_sec - end_render.tv_sec)*1000000
+                    + end_free.tv_usec - end_render.tv_usec;
+
+    printf("Loading speed:   %10ld bytes/s\n", size*1000000/load);
+    printf("Rendering speed: %10ld bytes/s\n", size*1000000/render);
+    printf("Freeing speed:   %10ld bytes/s\n", size*1000000/free_time);
 
     free(data);
     fclose(fp);

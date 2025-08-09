@@ -36,9 +36,10 @@ void season_object_add(struct season *object, char *key, struct season *item) {
         object->object.items = realloc(object->object.items, object->object.capacity*sizeof(*object->object.items));
         SEASON_ASSERT(object->object.items != NULL, "Buy more RAM lol");
     }
-    object->object.items[object->object.count].key = season_strdup(key);
-    object->object.items[object->object.count].value = malloc(sizeof(*item));
-    memcpy(object->object.items[object->object.count].value, item, sizeof(*item));
+    struct season_object_el *el = &object->object.items[object->object.count];
+    el->key = season_strdup(key);
+    el->value = malloc(sizeof(*item));
+    memcpy(el->value, item, sizeof(*item));
     object->object.count++;
 }
 
