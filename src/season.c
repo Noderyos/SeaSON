@@ -259,6 +259,20 @@ void season_object_add(struct season *object, char *key, struct season *item) {
     }
 }
 
+void season_object_remove(struct season *object, char *key) {
+    SEASON_ASSERT(object != NULL, "object must be non-null");
+    SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
+
+    int idx = _season_object_idx(object, key);
+    if (idx >= 0) {
+        free(object->object.items[idx].key);
+        season_free(object->object.items[idx].value);
+        free(object->object.items[idx].value);
+        memcpy(&object->object.items[idx], &object->object.items[idx+1],
+            (object->object.count-idx-1)*sizeof(*object->object.items));
+        object->object.count--;
+    }
+}
 
 struct season *season_array_get(struct season *array, size_t idx) {
     SEASON_ASSERT(array != NULL, "array must be non-null");
@@ -282,6 +296,17 @@ void season_array_add(struct season *array, struct season item) {
     array->array.items[array->array.count++] = item;
 }
 
+void season_array_remove(struct season *array, size_t idx) {
+    SEASON_ASSERT(array != NULL, "array must be non-null");
+    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
+
+    SEASON_ASSERT(idx < array->object.count, "invalid index");
+
+    season_free(&array->array.items[idx]);
+    memcpy(&array->array.items[idx], &array->array.items[idx+1],
+        (array->array.count-idx-1)*sizeof(*array->array.items));
+    array->array.count--;
+}
 
 void season_load(struct season *season, char *json_string) {
     struct season_lexer l = season_lex_init(json_string, strlen(json_string));
