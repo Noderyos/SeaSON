@@ -88,6 +88,7 @@ LICENSE
 #include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 
 enum season_type {
     SEASON_STRING,

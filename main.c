@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 
+#define SEASON_IMPLEMENTATION
 #include "season.h"
 
 int main(int argc, char *argv[]) {
