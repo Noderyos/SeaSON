@@ -15,10 +15,17 @@
             } \
         }while(0)
 
-#define ERROR(fmt, ...) \
+#define SEASON_ERROR(fmt, ...) \
         do { \
-                fprintf(stderr, "error: %s:%d: %s: %s\n", \
-                        __FILE__, __LINE__, __FUNCTION__, fmt, ##__VA_ARGS__); \
+                fprintf(stderr, "error: %s:%d: %s: " fmt "\n", \
+                        __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
+                exit(1); \
+        }while(0)
+
+#define SEASON_PARSE_ERROR(fmt, ...) \
+        do { \
+                fprintf(stderr, "season parse error: line %ld column %ld: " fmt "\n",\
+                t.line, t.column, ##__VA_ARGS__); \
                 exit(1); \
         }while(0)
 
@@ -87,9 +94,9 @@ char *_season_unescape(const char *str, size_t len) {
                 case 'f':*p++ = 12;break;
                 case 'r':*p++ = 13;break;
                 case 'u':
-                    ERROR("Unicode is not yet supported");
+                    SEASON_ERROR("Unicode is not yet supported");
                 default:
-                    ERROR("Invalid escape code");;
+                    SEASON_ERROR("Invalid escape code");
             }
             str++;
         } else {
@@ -124,7 +131,7 @@ struct season _season_parse_symbol(struct season_token t) {
             value.boolean = 0;
             break;
         default:
-            ERROR("Not a symbol");
+            SEASON_ASSERT(0, "Not a symbol (my fault, not yours)");
     }
     return value;
 }
@@ -134,10 +141,12 @@ struct season _season_parse_object(struct season_lexer *l) {
     struct season object = {.type = SEASON_OBJECT};
     struct season_token t = season_lex_next(l);
     while (t.type != SEASON_TOK_CLOSE_CURLY) {
-        if (t.type != SEASON_TOK_STRING) ERROR("Expecting key");
+        if (t.type != SEASON_TOK_STRING)
+            SEASON_PARSE_ERROR("Expecting key");
         char *key = _season_unescape(t.text, t.text_len);
-        if (season_lex_next(l).type != SEASON_TOK_COLON)
-            ERROR("Expecting colon");
+        t = season_lex_next(l);
+        if (t.type != SEASON_TOK_COLON)
+            SEASON_PARSE_ERROR("Expecting ':'");
         t = season_lex_next(l);
 
         struct season value;
@@ -157,21 +166,18 @@ struct season _season_parse_object(struct season_lexer *l) {
                 value = _season_parse_array(l);
                 break;
 
-            case SEASON_TOK_CLOSE_CURLY:
-                ERROR("Should not fall here");
-
             default:
-                ERROR("Invalid token");
+                SEASON_PARSE_ERROR("Invalid token");
         }
         season_object_add(&object, key, &value);
         free(key);
         t = season_lex_next(l);
         if (t.type != SEASON_TOK_CLOSE_CURLY && t.type != SEASON_TOK_COMMA)
-            ERROR("Expecting comma");
+            SEASON_PARSE_ERROR("Expecting ','");
         if (t.type == SEASON_TOK_COMMA) {
             t = season_lex_next(l);
             if (t.type == SEASON_TOK_CLOSE_CURLY)
-                ERROR("Expecting value");
+                SEASON_PARSE_ERROR("Illegal trailing comma before end of object");
         }
     }
     return object;
@@ -198,20 +204,17 @@ struct season _season_parse_array(struct season_lexer *l) {
                 value = _season_parse_array(l);
                 break;
 
-            case SEASON_TOK_CLOSE_BRACKET:
-                ERROR("Should not fall here");
-
             default:
-                ERROR("Invalid token");
+                SEASON_PARSE_ERROR("Invalid token");
         }
         season_array_add(&array, value);
         t = season_lex_next(l);
         if (t.type != SEASON_TOK_CLOSE_BRACKET && t.type != SEASON_TOK_COMMA)
-            ERROR("Expecting comma");
+            SEASON_PARSE_ERROR("Expecting ','");
         if (t.type == SEASON_TOK_COMMA) {
             t = season_lex_next(l);
             if (t.type == SEASON_TOK_CLOSE_BRACKET)
-                ERROR("Expecting value");
+                SEASON_PARSE_ERROR("Illegal trailing comma before end of array");
         }
     }
     return array;
@@ -338,7 +341,7 @@ void season_load(struct season *season, char *json_string) {
             *season = _season_parse_symbol(t);
             break;
         default:
-            ERROR("Invalid token");
+            SEASON_PARSE_ERROR("Invalid token");
     }
 }
 
