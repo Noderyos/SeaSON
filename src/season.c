@@ -1,22 +1,30 @@
 #include "season.h"
+
+#include <assert.h>
+
 #include "lexer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define SEASON_ASSERT(x, msg) \
+#define SEASON_ASSERT(x, fmt, ...) \
         do { \
             if(!(x)) { \
-                fprintf(stderr, msg "\n"); \
+                fprintf(stderr, "assert: %s:%d: %s: '%s': " \
+                                fmt "\n", __FILE__, __LINE__, __FUNCTION__, \
+                                #x, ##__VA_ARGS__); \
                 exit(1); \
             } \
         }while(0)
 
 void season_array_add(struct season *array, struct season item) {
-    SEASON_ASSERT(array->type == SEASON_ARRAY, "Object must be an array");
+    SEASON_ASSERT(array != NULL, "array must be non-null");
+    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
     if (array->array.count >= array->array.capacity) {
-        array->array.capacity = array->array.capacity == 0 ? 8 : array->array.capacity*2;
-        array->array.items = realloc(array->array.items, array->array.capacity*sizeof(*array->array.items));
+        array->array.capacity =
+            array->array.capacity == 0 ? 8 : array->array.capacity*2;
+        array->array.items = realloc(
+            array->array.items, array->array.capacity*sizeof(*array->array.items));
         SEASON_ASSERT(array->array.items != NULL, "Buy more RAM lol");
     }
     array->array.items[array->array.count++] = item;
@@ -30,10 +38,13 @@ char *season_strdup(const char *s) { // C99 don't have strdup
 }
 
 void season_object_add(struct season *object, char *key, struct season *item) {
-    SEASON_ASSERT(object->type == SEASON_OBJECT, "Object must be an object");
+    SEASON_ASSERT(object != NULL, "object must be non-null");
+    SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
     if (object->object.count >= object->object.capacity) {
-        object->object.capacity = object->object.capacity == 0 ? 8 : object->object.capacity*2;
-        object->object.items = realloc(object->object.items, object->object.capacity*sizeof(*object->object.items));
+        object->object.capacity =
+            object->object.capacity == 0 ? 8 : object->object.capacity*2;
+        object->object.items = realloc(
+            object->object.items, object->object.capacity*sizeof(*object->object.items));
         SEASON_ASSERT(object->object.items != NULL, "Buy more RAM lol");
     }
     struct season_object_el *el = &object->object.items[object->object.count];
@@ -80,6 +91,7 @@ char *season_escape(const char *str, size_t len) {
 }
 
 void season_render(struct season *season, FILE *stream) {
+    SEASON_ASSERT(season != NULL, "season must be non-null");
     switch (season->type) {
         case SEASON_NULL:
             fprintf(stream, "null");
@@ -120,6 +132,7 @@ void season_render(struct season *season, FILE *stream) {
 }
 
 void season_free(struct season *season) {
+    SEASON_ASSERT(season != NULL, "season must be non-null");
     switch (season->type) {
         case SEASON_STRING:
             free(season->string.str);
@@ -228,7 +241,8 @@ struct season season_parse_object(struct season_lexer *l) {
     while (t.type != SEASON_TOK_CLOSE_CURLY) {
         if (t.type != SEASON_TOK_STRING) SEASON_LEX_UNREACH("Expecting key");
         char *key = season_unescape(t.text, t.text_len);
-        if (season_lex_next(l).type != SEASON_TOK_COLON) SEASON_LEX_UNREACH("Expecting colon");
+        if (season_lex_next(l).type != SEASON_TOK_COLON)
+            SEASON_LEX_UNREACH("Expecting colon");
         t = season_lex_next(l);
 
         struct season value;
@@ -257,7 +271,8 @@ struct season season_parse_object(struct season_lexer *l) {
         season_object_add(&object, key, &value);
         free(key);
         t = season_lex_next(l);
-        if (t.type != SEASON_TOK_CLOSE_CURLY && t.type != SEASON_TOK_COMMA) SEASON_LEX_UNREACH("Expecting comma");
+        if (t.type != SEASON_TOK_CLOSE_CURLY && t.type != SEASON_TOK_COMMA)
+            SEASON_LEX_UNREACH("Expecting comma");
         if (t.type == SEASON_TOK_COMMA) {
             t = season_lex_next(l);
             if (t.type == SEASON_TOK_CLOSE_CURLY)
@@ -296,7 +311,8 @@ struct season season_parse_array(struct season_lexer *l) {
         }
         season_array_add(&array, value);
         t = season_lex_next(l);
-        if (t.type != SEASON_TOK_CLOSE_BRACKET && t.type != SEASON_TOK_COMMA) SEASON_LEX_UNREACH("Expecting comma");
+        if (t.type != SEASON_TOK_CLOSE_BRACKET && t.type != SEASON_TOK_COMMA)
+            SEASON_LEX_UNREACH("Expecting comma");
         if (t.type == SEASON_TOK_COMMA) {
             t = season_lex_next(l);
             if (t.type == SEASON_TOK_CLOSE_BRACKET)
@@ -326,4 +342,25 @@ void season_load(struct season *season, char *json_string) {
         default:
             SEASON_LEX_UNREACH("Invalid token");
     }
+}
+
+struct season *season_object_get(struct season *object, const char *key) {
+    SEASON_ASSERT(object != NULL, "object must be non-null");
+    SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
+
+    for (size_t i = 0; i < object->object.count; i++) {
+        if (strcmp(object->object.items[i].key, key) == 0) {
+            return object->object.items[i].value;
+        }
+    }
+    return NULL;
+}
+
+struct season *season_array_get(struct season *array, size_t idx) {
+    SEASON_ASSERT(array != NULL, "array must be non-null");
+    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
+
+    SEASON_ASSERT(idx < array->object.count, "invalid index");
+
+    return &array->array.items[idx];
 }
