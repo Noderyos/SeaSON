@@ -42,10 +42,13 @@ struct season {
     };
 };
 
-void season_array_add(struct season *array, struct season item);
-void season_object_add(struct season *object, char *key, struct season *item);
+
 struct season *season_object_get(struct season *object, const char *key);
+void season_object_add(struct season *object, char *key, struct season *item);
+
 struct season *season_array_get(struct season *array, size_t idx);
+void season_array_add(struct season *array, struct season item);
+
 void season_load(struct season *season, char *json_string);
 void season_render(struct season *season, FILE *stream);
 void season_free(struct season *season);

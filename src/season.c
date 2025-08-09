@@ -17,44 +17,14 @@
             } \
         }while(0)
 
-void season_array_add(struct season *array, struct season item) {
-    SEASON_ASSERT(array != NULL, "array must be non-null");
-    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
-    if (array->array.count >= array->array.capacity) {
-        array->array.capacity =
-            array->array.capacity == 0 ? 8 : array->array.capacity*2;
-        array->array.items = realloc(
-            array->array.items, array->array.capacity*sizeof(*array->array.items));
-        SEASON_ASSERT(array->array.items != NULL, "Buy more RAM lol");
-    }
-    array->array.items[array->array.count++] = item;
-}
-
-char *season_strdup(const char *s) { // C99 don't have strdup
+char *_season_strdup(const char *s) { // C99 don't have strdup
     size_t size = strlen(s) + 1;
     char *str = malloc(size);
     if (str) memcpy(str, s, size);
     return str;
 }
 
-void season_object_add(struct season *object, char *key, struct season *item) {
-    SEASON_ASSERT(object != NULL, "object must be non-null");
-    SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
-    if (object->object.count >= object->object.capacity) {
-        object->object.capacity =
-            object->object.capacity == 0 ? 8 : object->object.capacity*2;
-        object->object.items = realloc(
-            object->object.items, object->object.capacity*sizeof(*object->object.items));
-        SEASON_ASSERT(object->object.items != NULL, "Buy more RAM lol");
-    }
-    struct season_object_el *el = &object->object.items[object->object.count];
-    el->key = season_strdup(key);
-    el->value = malloc(sizeof(*item));
-    memcpy(el->value, item, sizeof(*item));
-    object->object.count++;
-}
-
-int season_is_int(double x) {
+int _season_is_int(double x) {
     const double eps = 1e-9;
     long xi = (long)x;
     double diff = x - (double)xi;
@@ -63,7 +33,8 @@ int season_is_int(double x) {
     return diff < eps;
 }
 
-char *season_escape(const char *str, size_t len) {
+
+char *_season_escape(const char *str, size_t len) {
     char *out = malloc(len*2 + 1);
     if (!out) return NULL;
 
@@ -90,6 +61,245 @@ char *season_escape(const char *str, size_t len) {
     return out;
 }
 
+char *_season_unescape(const char *str, size_t len) {
+    char *out = malloc(len + 1);
+    char *p = out;
+
+    while(len--) {
+        if (*str == '\\') {
+            str++;
+            char next = *str;
+            switch(next) {
+                case '"':
+                case '\\':
+                case '/':
+                    *p++ = next;
+                    break;
+                case 'b':*p++ = 8;break;
+                case 't':*p++ = 9;break;
+                case 'n':*p++ = 10;break;
+                case 'v':*p++ = 11;break;
+                case 'f':*p++ = 12;break;
+                case 'r':*p++ = 13;break;
+                case 'u':
+                    SEASON_LEX_UNREACH("Unicode is not yet supported");
+                default:
+                    SEASON_LEX_UNREACH("Invalid escape code");;
+            }
+            str++;
+        } else {
+            *p++ = *str++;
+        }
+    }
+    *p = '\0';
+    return out;
+}
+
+struct season _season_parse_symbol(struct season_token t) {
+    struct season value;
+    switch (t.type) {
+        case SEASON_TOK_STRING:
+            value.type = SEASON_STRING;
+            value.string.str = _season_unescape(t.text, t.text_len);
+            value.string.len = t.text_len;
+            break;
+        case SEASON_TOK_NUMBER:
+            value.type = SEASON_NUMBER;
+            value.number = strtod(t.text, NULL);
+            break;
+        case SEASON_TOK_NULL:
+            value.type = SEASON_NULL;
+            break;
+        case SEASON_TOK_TRUE:
+            value.type = SEASON_BOOLEAN;
+            value.boolean = 1;
+            break;
+        case SEASON_TOK_FALSE:
+            value.type = SEASON_BOOLEAN;
+            value.boolean = 0;
+            break;
+        default:
+            SEASON_LEX_UNREACH("Not a symbol");
+    }
+    return value;
+}
+
+struct season _season_parse_array(struct season_lexer *l);
+struct season _season_parse_object(struct season_lexer *l) {
+    struct season object = {.type = SEASON_OBJECT};
+    struct season_token t = season_lex_next(l);
+    while (t.type != SEASON_TOK_CLOSE_CURLY) {
+        if (t.type != SEASON_TOK_STRING) SEASON_LEX_UNREACH("Expecting key");
+        char *key = _season_unescape(t.text, t.text_len);
+        if (season_lex_next(l).type != SEASON_TOK_COLON)
+            SEASON_LEX_UNREACH("Expecting colon");
+        t = season_lex_next(l);
+
+        struct season value;
+        switch (t.type) {
+            case SEASON_TOK_STRING:
+            case SEASON_TOK_NUMBER:
+            case SEASON_TOK_NULL:
+            case SEASON_TOK_TRUE:
+            case SEASON_TOK_FALSE:
+                value = _season_parse_symbol(t);
+                break;
+
+            case SEASON_TOK_OPEN_CURLY:
+                value = _season_parse_object(l);
+                break;
+            case SEASON_TOK_OPEN_BRACKET:
+                value = _season_parse_array(l);
+                break;
+
+            case SEASON_TOK_CLOSE_CURLY:
+                SEASON_LEX_UNREACH("Should not fall here");
+
+            default:
+                SEASON_LEX_UNREACH("Invalid token");
+        }
+        season_object_add(&object, key, &value);
+        free(key);
+        t = season_lex_next(l);
+        if (t.type != SEASON_TOK_CLOSE_CURLY && t.type != SEASON_TOK_COMMA)
+            SEASON_LEX_UNREACH("Expecting comma");
+        if (t.type == SEASON_TOK_COMMA) {
+            t = season_lex_next(l);
+            if (t.type == SEASON_TOK_CLOSE_CURLY)
+                SEASON_LEX_UNREACH("Expecting value");
+        }
+    }
+    return object;
+}
+
+struct season _season_parse_array(struct season_lexer *l) {
+    struct season array = {.type = SEASON_ARRAY};
+    struct season_token t = season_lex_next(l);
+    while (t.type != SEASON_TOK_CLOSE_BRACKET) {
+        struct season value;
+        switch (t.type) {
+            case SEASON_TOK_STRING:
+            case SEASON_TOK_NUMBER:
+            case SEASON_TOK_NULL:
+            case SEASON_TOK_TRUE:
+            case SEASON_TOK_FALSE:
+                value = _season_parse_symbol(t);
+                break;
+
+            case SEASON_TOK_OPEN_CURLY:
+                value = _season_parse_object(l);
+                break;
+            case SEASON_TOK_OPEN_BRACKET:
+                value = _season_parse_array(l);
+                break;
+
+            case SEASON_TOK_CLOSE_BRACKET:
+                SEASON_LEX_UNREACH("Should not fall here");
+
+            default:
+                SEASON_LEX_UNREACH("Invalid token");
+        }
+        season_array_add(&array, value);
+        t = season_lex_next(l);
+        if (t.type != SEASON_TOK_CLOSE_BRACKET && t.type != SEASON_TOK_COMMA)
+            SEASON_LEX_UNREACH("Expecting comma");
+        if (t.type == SEASON_TOK_COMMA) {
+            t = season_lex_next(l);
+            if (t.type == SEASON_TOK_CLOSE_BRACKET)
+                SEASON_LEX_UNREACH("Expecting value");
+        }
+    }
+    return array;
+}
+
+int _season_object_idx(struct season *object, const char *key) {
+    SEASON_ASSERT(object != NULL, "object must be non-null");
+    SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
+
+    for (size_t i = 0; i < object->object.count; i++) {
+        if (strcmp(object->object.items[i].key, key) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+
+struct season *season_object_get(struct season *object, const char *key) {
+    int idx = _season_object_idx(object, key);
+    if (idx < 0) return NULL;
+    return object->object.items[idx].value;
+}
+
+void season_object_add(struct season *object, char *key, struct season *item) {
+    SEASON_ASSERT(object != NULL, "object must be non-null");
+    SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
+    int key_idx = _season_object_idx(object, key);
+    if (key_idx < 0) {
+        if (object->object.count >= object->object.capacity) {
+            object->object.capacity =
+                object->object.capacity == 0 ? 8 : object->object.capacity*2;
+            object->object.items = realloc(
+                object->object.items, object->object.capacity*sizeof(*object->object.items));
+            SEASON_ASSERT(object->object.items != NULL, "Buy more RAM lol");
+        }
+        struct season_object_el *el = &object->object.items[object->object.count];
+        el->key = _season_strdup(key);
+        el->value = malloc(sizeof(*item));
+        memcpy(el->value, item, sizeof(*item));
+        object->object.count++;
+    } else {
+        season_free(object->object.items[key_idx].value);
+        memcpy(object->object.items[key_idx].value, item, sizeof(*item));
+    }
+}
+
+
+struct season *season_array_get(struct season *array, size_t idx) {
+    SEASON_ASSERT(array != NULL, "array must be non-null");
+    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
+
+    SEASON_ASSERT(idx < array->object.count, "invalid index");
+
+    return &array->array.items[idx];
+}
+
+void season_array_add(struct season *array, struct season item) {
+    SEASON_ASSERT(array != NULL, "array must be non-null");
+    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
+    if (array->array.count >= array->array.capacity) {
+        array->array.capacity =
+            array->array.capacity == 0 ? 8 : array->array.capacity*2;
+        array->array.items = realloc(
+            array->array.items, array->array.capacity*sizeof(*array->array.items));
+        SEASON_ASSERT(array->array.items != NULL, "Buy more RAM lol");
+    }
+    array->array.items[array->array.count++] = item;
+}
+
+
+void season_load(struct season *season, char *json_string) {
+    struct season_lexer l = season_lex_init(json_string, strlen(json_string));
+    struct season_token t = season_lex_next(&l);
+    switch (t.type) {
+        case SEASON_TOK_OPEN_CURLY:
+            *season = _season_parse_object(&l);
+            break;
+        case SEASON_TOK_OPEN_BRACKET:
+            *season = _season_parse_array(&l);
+            break;
+        case SEASON_TOK_STRING:
+        case SEASON_TOK_NUMBER:
+        case SEASON_TOK_NULL:
+        case SEASON_TOK_TRUE:
+        case SEASON_TOK_FALSE:
+            *season = _season_parse_symbol(t);
+            break;
+        default:
+            SEASON_LEX_UNREACH("Invalid token");
+    }
+}
+
 void season_render(struct season *season, FILE *stream) {
     SEASON_ASSERT(season != NULL, "season must be non-null");
     switch (season->type) {
@@ -100,12 +310,12 @@ void season_render(struct season *season, FILE *stream) {
             fprintf(stream, "%s", season->boolean ? "true" : "false");
             break;
         case SEASON_STRING:
-            char *escaped = season_escape(season->string.str, season->string.len);
+            char *escaped = _season_escape(season->string.str, season->string.len);
             fprintf(stream, "\"%s\"", escaped);
             free(escaped);
             break;
         case SEASON_NUMBER:
-            if (season_is_int(season->number))
+            if (_season_is_int(season->number))
                 fprintf(stream, "%ld", (long)season->number);
             else
                 fprintf(stream, "%lf", season->number);
@@ -167,200 +377,4 @@ void season_free(struct season *season) {
             // Nothing to free
             break;
     }
-}
-
-char *season_unescape(const char *str, size_t len) {
-    char *out = malloc(len + 1);
-    char *p = out;
-
-    while(len--) {
-        if (*str == '\\') {
-            str++;
-            char next = *str;
-            switch(next) {
-                case '"':
-                case '\\':
-                case '/':
-                    *p++ = next;
-                    break;
-                case 'b':*p++ = 8;break;
-                case 't':*p++ = 9;break;
-                case 'n':*p++ = 10;break;
-                case 'v':*p++ = 11;break;
-                case 'f':*p++ = 12;break;
-                case 'r':*p++ = 13;break;
-                case 'u':
-                    SEASON_LEX_UNREACH("Unicode is not yet supported");
-                default:
-                    SEASON_LEX_UNREACH("Invalid escape code");;
-            }
-            str++;
-        } else {
-            *p++ = *str++;
-        }
-    }
-    *p = '\0';
-    return out;
-}
-
-
-
-struct season season_parse_symbol(struct season_token t) {
-    struct season value;
-    switch (t.type) {
-        case SEASON_TOK_STRING:
-            value.type = SEASON_STRING;
-            value.string.str = season_unescape(t.text, t.text_len);
-            value.string.len = t.text_len;
-            break;
-        case SEASON_TOK_NUMBER:
-            value.type = SEASON_NUMBER;
-            value.number = strtod(t.text, NULL);
-            break;
-        case SEASON_TOK_NULL:
-            value.type = SEASON_NULL;
-            break;
-        case SEASON_TOK_TRUE:
-            value.type = SEASON_BOOLEAN;
-            value.boolean = 1;
-            break;
-        case SEASON_TOK_FALSE:
-            value.type = SEASON_BOOLEAN;
-            value.boolean = 0;
-            break;
-        default:
-            SEASON_LEX_UNREACH("Not a symbol");
-    }
-    return value;
-}
-
-struct season season_parse_array(struct season_lexer *l);
-struct season season_parse_object(struct season_lexer *l) {
-    struct season object = {.type = SEASON_OBJECT};
-    struct season_token t = season_lex_next(l);
-    while (t.type != SEASON_TOK_CLOSE_CURLY) {
-        if (t.type != SEASON_TOK_STRING) SEASON_LEX_UNREACH("Expecting key");
-        char *key = season_unescape(t.text, t.text_len);
-        if (season_lex_next(l).type != SEASON_TOK_COLON)
-            SEASON_LEX_UNREACH("Expecting colon");
-        t = season_lex_next(l);
-
-        struct season value;
-        switch (t.type) {
-            case SEASON_TOK_STRING:
-            case SEASON_TOK_NUMBER:
-            case SEASON_TOK_NULL:
-            case SEASON_TOK_TRUE:
-            case SEASON_TOK_FALSE:
-                value = season_parse_symbol(t);
-                break;
-
-            case SEASON_TOK_OPEN_CURLY:
-                value = season_parse_object(l);
-                break;
-            case SEASON_TOK_OPEN_BRACKET:
-                value = season_parse_array(l);
-                break;
-
-            case SEASON_TOK_CLOSE_CURLY:
-                SEASON_LEX_UNREACH("Should not fall here");
-
-            default:
-                SEASON_LEX_UNREACH("Invalid token");
-        }
-        season_object_add(&object, key, &value);
-        free(key);
-        t = season_lex_next(l);
-        if (t.type != SEASON_TOK_CLOSE_CURLY && t.type != SEASON_TOK_COMMA)
-            SEASON_LEX_UNREACH("Expecting comma");
-        if (t.type == SEASON_TOK_COMMA) {
-            t = season_lex_next(l);
-            if (t.type == SEASON_TOK_CLOSE_CURLY)
-                SEASON_LEX_UNREACH("Expecting value");
-        }
-    }
-    return object;
-}
-
-struct season season_parse_array(struct season_lexer *l) {
-    struct season array = {.type = SEASON_ARRAY};
-    struct season_token t = season_lex_next(l);
-    while (t.type != SEASON_TOK_CLOSE_BRACKET) {
-        struct season value;
-        switch (t.type) {
-            case SEASON_TOK_STRING:
-            case SEASON_TOK_NUMBER:
-            case SEASON_TOK_NULL:
-            case SEASON_TOK_TRUE:
-            case SEASON_TOK_FALSE:
-                value = season_parse_symbol(t);
-                break;
-
-            case SEASON_TOK_OPEN_CURLY:
-                value = season_parse_object(l);
-                break;
-            case SEASON_TOK_OPEN_BRACKET:
-                value = season_parse_array(l);
-                break;
-
-            case SEASON_TOK_CLOSE_BRACKET:
-                SEASON_LEX_UNREACH("Should not fall here");
-
-            default:
-                SEASON_LEX_UNREACH("Invalid token");
-        }
-        season_array_add(&array, value);
-        t = season_lex_next(l);
-        if (t.type != SEASON_TOK_CLOSE_BRACKET && t.type != SEASON_TOK_COMMA)
-            SEASON_LEX_UNREACH("Expecting comma");
-        if (t.type == SEASON_TOK_COMMA) {
-            t = season_lex_next(l);
-            if (t.type == SEASON_TOK_CLOSE_BRACKET)
-                SEASON_LEX_UNREACH("Expecting value");
-        }
-    }
-    return array;
-}
-
-void season_load(struct season *season, char *json_string) {
-    struct season_lexer l = season_lex_init(json_string, strlen(json_string));
-    struct season_token t = season_lex_next(&l);
-    switch (t.type) {
-        case SEASON_TOK_OPEN_CURLY:
-            *season = season_parse_object(&l);
-            break;
-        case SEASON_TOK_OPEN_BRACKET:
-            *season = season_parse_array(&l);
-            break;
-        case SEASON_TOK_STRING:
-        case SEASON_TOK_NUMBER:
-        case SEASON_TOK_NULL:
-        case SEASON_TOK_TRUE:
-        case SEASON_TOK_FALSE:
-            *season = season_parse_symbol(t);
-            break;
-        default:
-            SEASON_LEX_UNREACH("Invalid token");
-    }
-}
-
-struct season *season_object_get(struct season *object, const char *key) {
-    SEASON_ASSERT(object != NULL, "object must be non-null");
-    SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
-
-    for (size_t i = 0; i < object->object.count; i++) {
-        if (strcmp(object->object.items[i].key, key) == 0) {
-            return object->object.items[i].value;
-        }
-    }
-    return NULL;
-}
-
-struct season *season_array_get(struct season *array, size_t idx) {
-    SEASON_ASSERT(array != NULL, "array must be non-null");
-    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
-
-    SEASON_ASSERT(idx < array->object.count, "invalid index");
-
-    return &array->array.items[idx];
 }
