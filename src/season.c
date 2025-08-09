@@ -286,14 +286,7 @@ struct season *season_array_get(struct season *array, size_t idx) {
 void season_array_add(struct season *array, struct season item) {
     SEASON_ASSERT(array != NULL, "array must be non-null");
     SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
-    if (array->array.count >= array->array.capacity) {
-        array->array.capacity =
-            array->array.capacity == 0 ? 8 : array->array.capacity*2;
-        array->array.items = realloc(
-            array->array.items, array->array.capacity*sizeof(*array->array.items));
-        SEASON_ASSERT(array->array.items != NULL, "Buy more RAM lol");
-    }
-    array->array.items[array->array.count++] = item;
+    season_array_insert(array, item, array->array.count);
 }
 
 void season_array_remove(struct season *array, size_t idx) {
@@ -306,6 +299,25 @@ void season_array_remove(struct season *array, size_t idx) {
     memcpy(&array->array.items[idx], &array->array.items[idx+1],
         (array->array.count-idx-1)*sizeof(*array->array.items));
     array->array.count--;
+}
+
+void season_array_insert(struct season *array, struct season item, size_t idx) {
+    SEASON_ASSERT(array != NULL, "array must be non-null");
+    SEASON_ASSERT(array->type == SEASON_ARRAY, "array must be an array");
+
+    SEASON_ASSERT(idx <= array->object.count, "invalid index");
+
+    if (array->array.count >= array->array.capacity) {
+        array->array.capacity =
+            array->array.capacity == 0 ? 8 : array->array.capacity*2;
+        array->array.items = realloc(
+            array->array.items, array->array.capacity*sizeof(*array->array.items));
+        SEASON_ASSERT(array->array.items != NULL, "Buy more RAM lol");
+    }
+    memcpy(&array->array.items[idx+1], &array->array.items[idx],
+        (array->array.count-idx)*sizeof(*array->array.items));
+    array->array.items[idx] = item;
+    array->array.count++;
 }
 
 void season_load(struct season *season, char *json_string) {
