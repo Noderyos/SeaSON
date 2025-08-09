@@ -63,12 +63,15 @@ struct season_token season_lex_next(struct season_lexer *l){
         if (strncmp(&l->content[l->cursor], "null", 4) == 0) {
             token.type = SEASON_TOK_NULL;
             token.text_len = 4;
+            l->cursor += 4;
         } else if (strncmp(&l->content[l->cursor], "true", 4) == 0) {
             token.type = SEASON_TOK_TRUE;
             token.text_len = 4;
+            l->cursor += 4;
         } else if (strncmp(&l->content[l->cursor], "false", 5) == 0) {
             token.type = SEASON_TOK_FALSE;
             token.text_len = 5;
+            l->cursor += 5;
         }
         return token;
     }
