@@ -2,7 +2,7 @@
 
 A single-header json reader/writer
 
-> See full documentation in (season.h)[season.h]
+> See full documentation in [season.h](season.h)
 
 ## Short mode example
 
