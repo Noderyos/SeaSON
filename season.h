@@ -37,6 +37,13 @@ DOCUMENTATION
                     SEASON_OBJECT  > ._object - shall not access it directly, hence the _
                     SEASON_ARRAY   > ._array  - shall not access it directly, hence the _
 
+        * Helper macros
+            - season_object()   - Define empty object
+            - season_array()    - Define empty array
+            - season_number(x)  - Define number from x
+            - season_boolean(x) - Define boolean from x
+            - season_null()     - Define null
+
         * struct season season_string(const char *s);
             - Create season from char*
 
@@ -44,7 +51,7 @@ DOCUMENTATION
             - Retrieve value from object by key.
             - Returns NULL if key is not found.
 
-        * void season_object_add(struct season *object, char *key, struct season *item);
+        * void season_object_add(struct season *object, char *key, struct season item);
             - Add key-value pair to object.
             - Overwrites key if already present.
 
@@ -77,6 +84,37 @@ DOCUMENTATION
         * void season_free(struct season *season);
             - Recursively free all memory associated with season structure.
 
+    Short mode
+        Do this:
+            #define SEASON_SHORT
+        before you include this file
+
+        Added enums
+            * SEASON_STRING  > SEASON_STR
+            * SEASON_NUMBER  > SEASON_NUM
+            * SEASON_BOOLEAN > SEASON_BOOL
+            * SEASON_OBJECT  > SEASON_OBJ
+            * SEASON_ARRAY   > SEASON_ARR
+
+        Added typedefs
+            * struct season  > season
+
+        Added macros
+            * season_arr  > season_array
+            * season_obj  > season_object
+            * season_str  > season_string
+            * season_num  > season_number
+            * season_bool > season_boolean
+
+            * season_obj_get    > season_object_get
+            * season_obj_add    > season_object_add
+            * season_obj_remove > season_object_remove
+
+            * season_arr_get    > season_array_get
+            * season_arr_add    > season_array_add
+            * season_arr_remove > season_array_remove
+            * season_arr_insert > season_array_insert
+
 LICENSE
 
     See end of file for license information.
@@ -86,17 +124,24 @@ LICENSE
 #define SEASON_H
 
 #include <ctype.h>
-#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum season_type {
-    SEASON_STRING,
-    SEASON_NULL,
-    SEASON_NUMBER,
-    SEASON_BOOLEAN,
-    SEASON_OBJECT,
-    SEASON_ARRAY,
+    SEASON_STRING = 0,
+    SEASON_NULL = 1,
+    SEASON_NUMBER = 2,
+    SEASON_BOOLEAN = 3,
+    SEASON_OBJECT = 4,
+    SEASON_ARRAY = 5,
+#ifdef SEASON_SHORT
+    SEASON_STR = 0,
+    SEASON_NUM = 2,
+    SEASON_BOOL = 3,
+    SEASON_OBJ = 4,
+    SEASON_ARR = 5,
+#endif
 };
 
 struct _season_string {
@@ -130,8 +175,14 @@ struct season {
 
 struct season season_string(const char *s);
 
+#define season_object() ((struct season){.type=SEASON_OBJECT})
+#define season_array() ((struct season){.type=SEASON_ARRAY})
+#define season_number(x) ((struct season){.type=SEASON_NUMBER, .number=x})
+#define season_boolean(x) ((struct season){.type=SEASON_BOOLEAN, .boolean=x})
+#define season_null() ((struct season){.type=SEASON_NULL})
+
 struct season *season_object_get(struct season *object, const char *key);
-void season_object_add(struct season *object, char *key, struct season *item);
+void season_object_add(struct season *object, char *key, struct season item);
 void season_object_remove(struct season *object, char *key);
 
 struct season *season_array_get(struct season *array, size_t idx);
@@ -142,6 +193,24 @@ void season_array_insert(struct season *array, struct season item, size_t idx);
 void season_load(struct season *season, char *json_string);
 void season_render(struct season *season, FILE *stream);
 void season_free(struct season *season);
+
+#ifdef SEASON_SHORT
+typedef struct season season;
+#define season_obj_get season_object_get
+#define season_obj_add season_object_add
+#define season_obj_remove season_object_remove
+
+#define season_arr_get season_array_get
+#define season_arr_add season_array_add
+#define season_arr_remove season_array_remove
+#define season_arr_insert season_array_insert
+
+#define season_arr season_array
+#define season_obj season_object
+#define season_str season_string
+#define season_num season_number
+#define season_bool season_boolean
+#endif
 
 #endif
 #ifdef SEASON_IMPLEMENTATION
@@ -445,7 +514,7 @@ struct season _season_parse_object(struct _season_lexer *l) {
             default:
                 SEASON_PARSE_ERROR("Invalid token");
         }
-        season_object_add(&object, key, &value);
+        season_object_add(&object, key, value);
         free(key);
         t = _season_lex_next(l);
         if (t.type != _SEASON_TOK_CLOSE_CURLY && t.type != _SEASON_TOK_COMMA)
@@ -523,7 +592,7 @@ struct season *season_object_get(struct season *object, const char *key) {
     return object->_object.items[idx].value;
 }
 
-void season_object_add(struct season *object, char *key, struct season *item) {
+void season_object_add(struct season *object, char *key, struct season item) {
     SEASON_ASSERT(object != NULL, "object must be non-null");
     SEASON_ASSERT(object->type == SEASON_OBJECT, "object must be an object");
     int key_idx = _season_object_idx(object, key);
@@ -537,12 +606,12 @@ void season_object_add(struct season *object, char *key, struct season *item) {
         }
         struct _season_object_el *el = &object->_object.items[object->_object.count];
         el->key = _season_strdup(key);
-        el->value = malloc(sizeof(*item));
-        memcpy(el->value, item, sizeof(*item));
+        el->value = malloc(sizeof(item));
+        memcpy(el->value, &item, sizeof(item));
         object->_object.count++;
     } else {
         season_free(object->_object.items[key_idx].value);
-        memcpy(object->_object.items[key_idx].value, item, sizeof(*item));
+        memcpy(object->_object.items[key_idx].value, &item, sizeof(item));
     }
 }
 
